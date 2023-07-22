@@ -1,33 +1,45 @@
-from langchain import PromptTemplate, OpenAI, LLMChain
 import chainlit as cl
 from dotenv import load_dotenv
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyMuPDFLoader
 
 load_dotenv()
 
-template = """Question: {question}
+# Load your PDF data and initialize Langchain components
+persist_directory = "./storage"
+pdf_path = "./Politics_in_Zimbabwe.pdf"
 
-Answer: Let's think step by step."""
+loader = PyMuPDFLoader(pdf_path)
+documents = loader.load()
 
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=10)
+texts = text_splitter.split_documents(documents)
 
-@cl.on_chat_start
-def main():
-    # Instantiate the chain for that user session
-    prompt = PromptTemplate(template=template, input_variables=["question"])
-    llm_chain = LLMChain(prompt=prompt, llm=OpenAI(temperature=0), verbose=True)
+embeddings = OpenAIEmbeddings()
+vectordb = Chroma.from_documents(documents=texts,
+                                 embedding=embeddings,
+                                 persist_directory=persist_directory)
+vectordb.persist()
 
-    # Store the chain in the user session
-    cl.user_session.set("llm_chain", llm_chain)
+retriever = vectordb.as_retriever(search_kwargs={"k": 3})
+llm = ChatOpenAI(model_name='gpt-3.5-turbo')
 
+qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+
+# Chainlit app functions
 
 @cl.on_message
 async def main(message: str):
-    # Retrieve the chain from the user session
-    llm_chain = cl.user_session.get("llm_chain")  # type: LLMChain
-
-    # Call the chain asynchronously
-    res = await llm_chain.acall(message, callbacks=[cl.AsyncLangchainCallbackHandler()])
-
-    # Do any post processing here
+    # Call the Langchain app to process the user's query
+    try:
+        llm_response = qa(f"###Prompt {message}")
+        response = llm_response["result"]
+    except Exception as err:
+        response = 'Exception occurred. Please try again' + str(err)
 
     # Send the response
-    await cl.Message(content=res["text"]).send()
+    await cl.Message(content=response).send()
