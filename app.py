@@ -32,6 +32,10 @@ qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retrieve
 
 # Chainlit app functions
 
+@cl.on_chat_start
+def main():
+    cl.user_session.set("qa", qa)
+
 @cl.on_message
 async def main(message: str):
     # Call the Langchain app to process the user's query
