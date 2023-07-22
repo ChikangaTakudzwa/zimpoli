@@ -6,8 +6,11 @@ from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyMuPDFLoader
+import os
 
 load_dotenv()
+
+user_api_key = os.getenv("OPENAI_API_KEY")
 
 # Load your PDF data and initialize Langchain components
 persist_directory = "./storage"
@@ -34,7 +37,11 @@ qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retrieve
 
 @cl.on_chat_start
 def main():
+
+    # Store the chain in the user session
+    # cl.user_session.set("llm_chain", llm_chain)
     cl.user_session.set("qa", qa)
+
 
 @cl.on_message
 async def main(message: str):
